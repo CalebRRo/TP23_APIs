@@ -11,16 +11,23 @@ const Actors = db.Actor;
 
 const moviesController = {
   list: async (req, res) => {
-   /*  db.Movie.findAll({
-      include: ["genre"],
-    }).then((movies) => {
-      res.render("moviesList.ejs", { movies });
-    }); */
+ 
     try{
-     
+       let {order = "id"} = req.query;
+      let orders = ["id","title","rating","awards","release_date"];
 
+      if (!orders.includes(order)) {
+        throw new Error(`El campo ${order} no existe!!: [title, rating,"awards","release_date"]`);
+      } 
+     
         let movies = await db.Movie.findAll({
-          orde: ["title"],
+          include:[
+            {
+              association : "genre",
+              attributes : ["name"]
+            }
+          ],
+            orde: [order],
             attributes:{
                 exclude : ["created_at", "updated_at"]
             }
@@ -47,17 +54,18 @@ const moviesController = {
     }
   },
   detail: async (req, res) => {
-  /*   db.Movie.findByPk(req.params.id, {
-      include: ["genre"],
-    }).then((movie) => {
-      res.render("moviesDetail.ejs", { movie });
-    }); */
+let error
     try{
       const {id} = req.params;
       if (isNaN(id)) {
-        throw new Error("El Id debe ser un número!!!")
+        error = new Error("El Id debe ser un número!!!")
+        error.status = 403;
+        throw error;
       }
       let movie = await db.Movie.findByPk(id,{
+       /*  include: [
+          {all : true}
+        ], */
             attributes:{
               exclude: ["created_at", "updated_at"]
             }
@@ -71,10 +79,13 @@ const moviesController = {
           data: movie
         })
       }
-      throw new Error("Upss, no se encuentra la peliculas");
+      error = new Error("Upss, no se encuentra la peliculas");
+      error.status = 403;
+      throw error;
+
     } catch (error){
         console.log(error);
-        return res.status(500).json({
+        return res.status(error.status || 500).json({
             ok: false,
             msg: error.message
             ? error.message
@@ -83,52 +94,104 @@ const moviesController = {
     }
     
   },
-  new: (req, res) => {
-    db.Movie.findAll({
-      order: [["release_date", "DESC"]],
-      limit: 5,
-    }).then((movies) => {
-      res.render("newestMovies", { movies });
-    });
+  newest: async (req, res) => {
+    let error
+    try{
+       let movies = await  db.Movie.findAll({
+        order: [["release_date", "DESC"]],
+        limit: +req.query.limit || 5,
+      });
+      if (movies.length) {
+        return res.status(200).json({
+          ok : true,
+          meta : {
+            total : movies.length
+          },
+          data : movies
+        })
+      };
+      error = new Error("Upss, mo hay pelicula");
+      error.status = 403;
+      throw error;
+
+    }
+    catch (error) {
+      console.log(error);
+      return res.status(error.status || 500).json({
+          ok: false,
+          msg: error.message
+          ? error.message
+          : "Comuniquise con el administrador del sitio",
+      });
+      
+    }
+   
   },
-  recomended: (req, res) => {
-    db.Movie.findAll({
-      include: ["genre"],
-      where: {
-        rating: { [db.Sequelize.Op.gte]: 8 },
-      },
-      order: [["rating", "DESC"]],
-    }).then((movies) => {
-      res.render("recommendedMovies.ejs", { movies });
-    });
+  recomended: async (req, res) => {
+    let error;
+    try{
+     let movies = await db.Movie.findAll({
+        include: ["genre"],
+        limit : +req.query.limit || 5,
+        order: [["rating", "DESC"]],
+      });
+      if (movies.length) {
+        return res.status(200).json({
+          ok : true,
+          meta : {
+            total : movies.length
+          },
+          data : movies
+        })
+      };
+      error = new Error("Upss, mo hay pelicula");
+      error.status = 403;
+      throw error;
+    } catch(error){
+      console.log(error);
+      return res.status(error.status || 500).json({
+          ok: false,
+          msg: error.message
+          ? error.message
+          : "Comuniquise con el administrador del sitio",
+      });
+    }
+   
   },
   //Aqui dispongo las rutas para trabajar con el CRUD
-  add: function (req, res) {
-    let promGenres = Genres.findAll();
-    let promActors = Actors.findAll();
 
-    Promise.all([promGenres, promActors])
-      .then(([allGenres, allActors]) => {
-        return res.render(path.resolve(__dirname, "..", "views", "moviesAdd"), {
-          allGenres,
-          allActors,
-        });
+  create: async (req, res) => {
+    const {title,rating,awards,release_date,length,genre_id} = req.body;
+    try {
+     let newMovie = await db.Movie.create({
+        title: title && title.trim(),
+        rating: rating,
+        awards: awards,
+        release_date: release_date,
+        length: length,
+        genre_id: genre_id
       })
-      .catch((error) => res.send(error));
-  },
-  create: function (req, res) {
-    Movies.create({
-      title: req.body.title,
-      rating: req.body.rating,
-      awards: req.body.awards,
-      release_date: req.body.release_date,
-      length: req.body.length,
-      genre_id: req.body.genre_id,
-    })
-      .then(() => {
-        return res.redirect("/movies");
-      })
-      .catch((error) => res.send(error));
+      if (newMovie) {
+        return res.status(200).json({
+          ok : true,
+          meta : {
+            total : 1,
+            url :`${req.protocol}://${req.get("host")}/movies/${newMovie.id}`
+          },
+          data : newMovie
+        })
+      };
+    } catch (error) {
+      console.log(error);
+      return res.status(error.status || 500).json({
+          ok: false,
+          msg: error.message
+          ? error.message
+          : "Comuniquise con el administrador del sitio",
+      });
+    }
+  
+      
   },
   edit: function (req, res) {
     let movieId = req.params.id;

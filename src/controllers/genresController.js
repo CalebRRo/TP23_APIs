@@ -10,12 +10,11 @@ const genresController = {
             .catch(error => console.log(error)) */
 
     try {
-      let {order} = req.query;
-      let orders = ["name", "ranking"];
+      let {order = "id"} = req.query;
+      let orders = ["id", "name", "ranking"];
 
-      if (orders.includes(order)) {
-         order = order ? order : "id";
-      } else {
+      if (!orders.includes(order)) {
+     
         throw new Error(`El campo ${order} no existe!!: [name, ranking]`);
       }
 
@@ -37,7 +36,7 @@ const genresController = {
       throw new Error("Upss, hubo un error");
     } catch (error) {
       console.log(error);
-      return res.status(500).json({
+      return res.status(error.status || 500).json({
         ok: false,
         msg: error.message
           ? error.message
